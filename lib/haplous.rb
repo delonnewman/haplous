@@ -89,22 +89,6 @@ end
 class Month < DateRange
   include Comparable
 
-  NAMES = [
-    nil,
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December'
-  ].freeze
-
   class << self
     def current
       from_date(Date.today)
@@ -134,7 +118,7 @@ class Month < DateRange
   end
 
   def name
-    NAMES[@month]
+    Date::MONTHNAMES[@month]
   end
 
   def to_s
