@@ -7,6 +7,7 @@ GIT
 GEM
   remote: https://rubygems.org/
   specs:
+    extralite (3.1.1)
     zeitwerk (2.8.3)
 
 PLATFORMS
@@ -14,11 +15,13 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  extralite
   time-of-day!
   zeitwerk
 
 CHECKSUMS
   bundler (4.0.18) sha256=02d9a17429de1847b4e0c9f27a9ee4b20c0a74c0a641b4e77195d6019e3618ac
+  extralite (3.1.1) sha256=192e9e9dbc4ef5ec47ffd79e3dedc2a9ecd2e70562b4b6d12f8747281a682dda
   time-of-day (0.2.0)
   zeitwerk (2.8.3) sha256=2c85125a8467ce069e20123d1e709a08955c9d29c118c25b46b7b7fafdbb92e5
 
