@@ -311,46 +311,98 @@ class Duration
   end
 end
 
-class Module
-  alias has attr
-end
+EMPTY_ARRAY = [].freeze
 
-class Entity
-  attr_reader :id
+class Enum
+  def self.define(*members)
+    enum = Class.new(Enum)
+    member_class = Class.new(enum) do
+      attr_reader :name, :value
+      def initialize(name, value)
+        @name  = name
+        @value = value
+        freeze
+      end
 
-  def inititalize(**attributes)
-    attributes.each_pair do |name, value|
-      instance_variable_set(:"@#{name}", value)
+      def inspect
+        "#<enum #{self.class.superclass} #{@name}=#{@value}>"
+      end
+      alias to_s inspect
     end
-  end
 
-  def attributes
-    instance_variables.each_with_object({}) do |var, hash|
-      hash[var.name.slice(1).to_sym] = instance_variables_get(var)
+    enum.instance_eval do
+      def members_by_name
+        @members_by_name ||= {}
+      end
+
+      def members_by_value
+        @members_by_value ||= {}
+      end
+
+      members.each_with_index do |name, value|
+        member = member_class.new(name, value)
+        members_by_name[name] = member
+        members_by_value[value] = member
+      end
+
+      def new(...)
+        raise NoMethodError
+      end
+
+      def members
+        members_by_name.keys
+      end
+
+      def member(name)
+        members_by_name.fetch(name)
+      end
+
+      members.each do |name|
+        define_singleton_method name do
+          members_by_name[name]
+        end
+      end
     end
+
+    enum
   end
 end
 
 module Period
-  has :started_at
-  has :ended_at
-
   def duration
     Duration.new(ended_at - started_at)
   end
 end
 
-class Schedule < Entity
+Schedule = Data.define(:name, :description, :slots, :goal_id, :starts_at, :ends_at)
+class Schedule
   include Period
 
-  has :name
-  has :description
+  def initialize(description: nil, slots: EMPTY_ARRAY, **attributes)
+    super(description:, slots:, **attributes)
+  end
+end
 
-  has :slots
-  has :goal
+Periodicity = Enum.define(:daily, :weekly, :monthly, :yearly)
 
-  class Slot < Entity
-    include Period
+Slot = Data.define(:weekday, :schedule_id, :starts_at, :ends_at, :periodicity)
+class Slot
+  include Period
+
+  def initialize(periodicity: Periodicity.weekly, **attributes)
+    super(periodicity:, **attributes)
+  end
+end
+
+Event = Data.define(:goal_id, :starts_at, :ends_at)
+class Event
+  include Period
+end
+
+Goal = Data.define(:name, :amount, :unit, :schedule, :periodicity)
+class Goal
+  def initialize(periodicity: Periodicity.weekly, **attributes)
+    super(periodicity:, **attributes)
   end
 end
 
@@ -363,22 +415,21 @@ class Store
 end
 
 class SchedulesStore < Store
-end
+  def create(schedule)
+    db.execute <<~SQL, schedule
+      insert into schedules (name, description, goal_id, starts_at, ends_at)
+        values ($name, $description, $goal_id, $starts_at, $ends_at)
+    SQL
+  end
 
-class Event < Entity
-  include Period
-
-  has :name
-  has :description # optional
+  def by_id(id)
+    db.query_single <<~SQL, id:
+      select * from schedules where id = $id
+    SQL
+  end
 end
 
 class EventsStore < Store
-end
-
-class Goal < Entity
-  has :name
-  has :amount
-  has :unit
 end
 
 class GoalsStore < Store
@@ -388,15 +439,19 @@ class Haplous
   attr_reader :db, :schedules, :goals, :events
 
   def initialize(dbfile, &)
-    @db        = Extralite::Database.new(dbfile)
+    @db        = Extralite::Database.new(root_path.join(dbfile).to_s)
     @schedules = SchedulesStore.new(@db)
     @goals     = GoalsStore.new(@db)
     @events    = EventsStore.new(@db)
     instance_exec(&) if block_given?
   end
+
+  def root_path
+    Pathname.new(__dir__).join('..').realpath
+  end
 end
 
-Haplous.new('db/haplous.sqlite3') do
+App = Haplous.new('db/haplous.sqlite3') do
   db.execute <<~SQL
     create table if not exists goals (
       id     integer primary key autoincrement,
@@ -413,7 +468,7 @@ Haplous.new('db/haplous.sqlite3') do
       ends_at     datetime not null,
       goal_id     integer  not null,
 
-      foreign key (goal_id) references goals.id on delete cascade
+      foreign key (goal_id) references goals (id) on delete cascade
     );
 
     create table if not exists slots (
@@ -423,7 +478,7 @@ Haplous.new('db/haplous.sqlite3') do
       ends_at     integer not null, -- time of day
       schedule_id integer not null,
 
-      foreign key (schedule_id) references schedules.id on delete cascade
+      foreign key (schedule_id) references schedules (id) on delete cascade
     );
 
     create table if not exists events (
@@ -432,7 +487,7 @@ Haplous.new('db/haplous.sqlite3') do
       ends_at    datetime not null,
       goal_id    integer  not null,
 
-      foreign key (goal_id) references goals.id on delete cascade
+      foreign key (goal_id) references goals (id) on delete cascade
     );
   SQL
 end
