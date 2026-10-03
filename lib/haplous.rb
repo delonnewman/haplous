@@ -399,10 +399,10 @@ class Event
   include Period
 end
 
-Goal = Data.define(:name, :amount, :unit, :schedule, :periodicity)
+Goal = Data.define(:id, :name, :amount, :unit, :periodicity)
 class Goal
-  def initialize(periodicity: Periodicity.weekly, **attributes)
-    super(periodicity:, **attributes)
+  def initialize(id: nil, periodicity: Periodicity.weekly, **attributes)
+    super(periodicity:, id:, **attributes)
   end
 end
 
@@ -433,6 +433,12 @@ class EventsStore < Store
 end
 
 class GoalsStore < Store
+  def create(goal)
+    db.execute <<~SQL, goal
+      insert into goals (name, amount, unit, periodicity)
+        values ($name, $amount, $unit, $periodicity)
+    SQL
+  end
 end
 
 class Haplous
@@ -454,10 +460,11 @@ end
 App = Haplous.new('db/haplous.sqlite3') do
   db.execute <<~SQL
     create table if not exists goals (
-      id     integer primary key autoincrement,
-      name   text    not null unique,
-      amount integer not null,
-      unit   text    not null
+      id          integer primary key autoincrement,
+      name        text    not null unique,
+      amount      integer not null,
+      unit        text    not null,
+      periodicity integer not null -- enum
     );
 
     create table if not exists schedules (
@@ -473,7 +480,11 @@ App = Haplous.new('db/haplous.sqlite3') do
 
     create table if not exists slots (
       id          integer primary key autoincrement,
-      weekday     integer not null, -- for now we just support weekly schedules
+      periodicity integer not null, -- enum
+      weekday     integer, -- for weekly schedules
+      monthday    integer, -- for montly schedules
+      yearmonth   integer, -- for yearly schedules
+      yeardate    integer, -- for yearly schedules
       starts_at   integer not null, -- time of day
       ends_at     integer not null, -- time of day
       schedule_id integer not null,
